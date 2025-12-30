@@ -245,6 +245,9 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			}
 			existingSecret.Annotations[AnnotationSecretExpiry] = expiryTime.Format(time.RFC3339)
 			if err := r.Update(ctx, &existingSecret); err != nil {
+				if apierrors.IsConflict(err) {
+					return ctrl.Result{Requeue: true}, nil
+				}
 				return ctrl.Result{}, fmt.Errorf("failed to update secret: %w", err)
 			}
 		}
