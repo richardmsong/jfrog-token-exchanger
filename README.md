@@ -1,78 +1,111 @@
-# jfrog-token-exchanger
-// TODO(user): Add simple overview of use/purpose
+# JFrog Token Exchanger
+
+A Kubernetes controller that automatically manages JFrog registry credentials by exchanging Kubernetes ServiceAccount tokens for JFrog access tokens using OIDC token exchange.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+
+JFrog Token Exchanger solves the problem of managing JFrog registry credentials in Kubernetes by:
+
+- **Automating token exchange**: Converts Kubernetes ServiceAccount tokens into JFrog access tokens via OIDC token exchange (RFC 8693)
+- **Managing secrets automatically**: Creates and maintains Docker config secrets with valid JFrog credentials
+- **Token lifecycle management**: Automatically renews tokens before expiry to prevent authentication failures
+- **Simplified integration**: Eliminates the need for manual credential rotation and management
+
+## How It Works
+
+1. Annotate a ServiceAccount with `jfrog.io/token: enabled`
+2. The controller detects the annotation and requests a K8s token via the TokenRequest API
+3. The controller exchanges the K8s token with JFrog's OIDC endpoint for an access token
+4. A `dockerconfigjson` secret is created with the JFrog credentials
+5. The secret is attached as an `imagePullSecret` to the ServiceAccount
+6. Pods using that ServiceAccount automatically get JFrog registry access
+7. The controller monitors token expiry and refreshes tokens automatically
 
 ## Getting Started
-You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
-**Note:** Your controller will automatically use the current context in your kubeconfig file (i.e. whatever cluster `kubectl cluster-info` shows).
+
+You'll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
+
+### Prerequisites
+
+- Kubernetes cluster (v1.27+)
+- JFrog instance with OIDC token exchange configured
+  - **Don't have a JFrog instance?** You can [provision a free trial of JFrog Artifactory](https://jfrog.com/start-free/) to test this controller
+- OIDC provider configured in JFrog that trusts your Kubernetes cluster's ServiceAccount tokens
+
+### Configuration
+
+The controller requires the following environment variables or configuration:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `JFROG_URL` | Base URL of your JFrog instance | `https://mycompany.jfrog.io` |
+| `JFROG_REGISTRY` | Registry hostname for docker config | `mycompany.jfrog.io` |
+| `PROVIDER_NAME` | OIDC provider name configured in JFrog | `my-k8s-cluster` |
 
 ### Running on the cluster
-1. Install Instances of Custom Resources:
 
-```sh
-kubectl apply -f config/samples/
-```
-
-2. Build and push your image to the location specified by `IMG`:
+1. Build and push your image to the location specified by `IMG`:
 
 ```sh
 make docker-build docker-push IMG=<some-registry>/jfrog-token-exchanger:tag
 ```
 
-3. Deploy the controller to the cluster with the image specified by `IMG`:
+2. Deploy the controller to the cluster with the image specified by `IMG`:
 
 ```sh
 make deploy IMG=<some-registry>/jfrog-token-exchanger:tag
 ```
 
-### Uninstall CRDs
-To delete the CRDs from the cluster:
+### Usage
 
-```sh
-make uninstall
+To enable automatic JFrog token management for a ServiceAccount, add the `jfrog.io/token: enabled` annotation:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-app
+  namespace: default
+  annotations:
+    jfrog.io/token: enabled
 ```
 
+The controller will automatically:
+- Create a secret named `<serviceaccount-name>-jfrog-token`
+- Attach it to the ServiceAccount's `imagePullSecrets`
+- Refresh the token before it expires
+
 ### Undeploy controller
+
 UnDeploy the controller from the cluster:
 
 ```sh
 make undeploy
 ```
 
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
-
-### How it works
-This project aims to follow the Kubernetes [Operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/).
-
-It uses [Controllers](https://kubernetes.io/docs/concepts/architecture/controller/),
-which provide a reconcile function responsible for synchronizing resources until the desired state is reached on the cluster.
+## Development
 
 ### Test It Out
-1. Install the CRDs into the cluster:
 
-```sh
-make install
-```
-
-2. Run your controller (this will run in the foreground, so switch to a new terminal if you want to leave it running):
+Run your controller locally (this will run in the foreground, so switch to a new terminal if you want to leave it running):
 
 ```sh
 make run
 ```
 
-**NOTE:** You can also run this in one step by running: `make install run`
-
-### Modifying the API definitions
-If you are editing the API definitions, generate the manifests such as CRs or CRDs using:
+### Running Tests
 
 ```sh
-make manifests
+make test
 ```
 
-**NOTE:** Run `make --help` for more information on all potential `make` targets
+### How it works
+
+This project follows the Kubernetes [Operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) using [Controllers](https://kubernetes.io/docs/concepts/architecture/controller/) which provide a reconcile function responsible for synchronizing resources until the desired state is reached on the cluster.
+
+The controller watches ServiceAccount resources and reconciles when:
+- A ServiceAccount is created/updated with the `jfrog.io/token: enabled` annotation
+- A token is approaching expiry and needs renewal
 
 More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
 
@@ -91,4 +124,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
