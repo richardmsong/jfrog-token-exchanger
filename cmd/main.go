@@ -17,9 +17,15 @@ limitations under the License.
 package main
 
 import (
+	"crypto/tls"
 	"flag"
+	"fmt"
+	"net/http"
+	"net/url"
 	"os"
+	"time"
 
+	"github.com/spf13/viper"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -64,6 +70,40 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	// Configure Viper to read environment variables
+	viper.AutomaticEnv()
+	viper.SetEnvPrefix("JTE") // Use JTE prefix to prevent environment variable collisions
+
+	// Read required configuration
+	jfrogURL := viper.GetString("JFROG_URL")
+	if jfrogURL == "" {
+		setupLog.Error(fmt.Errorf("missing required configuration"), "JFROG_URL environment variable is required")
+		os.Exit(1)
+	}
+
+	// Validate that JFROG_URL is a valid URL
+	if _, err := url.Parse(jfrogURL); err != nil {
+		setupLog.Error(err, "JFROG_URL must be a valid URL", "jfrogURL", jfrogURL)
+		os.Exit(1)
+	}
+
+	jfrogRegistry := viper.GetString("JFROG_REGISTRY")
+	if jfrogRegistry == "" {
+		setupLog.Error(fmt.Errorf("missing required configuration"), "JFROG_REGISTRY environment variable is required")
+		os.Exit(1)
+	}
+
+	providerName := viper.GetString("PROVIDER_NAME")
+	if providerName == "" {
+		setupLog.Error(fmt.Errorf("missing required configuration"), "PROVIDER_NAME environment variable is required")
+		os.Exit(1)
+	}
+
+	setupLog.Info("JFrog configuration loaded",
+		"jfrogURL", jfrogURL,
+		"jfrogRegistry", jfrogRegistry,
+		"providerName", providerName)
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
@@ -95,12 +135,33 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create JFrog client for token exchange with proper TLS configuration
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			},
+			MaxIdleConns:        10,
+			MaxIdleConnsPerHost: 5,
+			IdleConnTimeout:     90 * time.Second,
+		},
+	}
+
+	jfrogClient := &controller.DefaultJFrogClient{
+		HTTPClient:   httpClient,
+		JFrogURL:     jfrogURL,
+		ProviderName: providerName,
+	}
+
 	if err = (&controller.ServiceAccountReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		TokenRequester: &controller.DefaultTokenRequester{
 			Clientset: clientset,
 		},
+		JFrogClient:   jfrogClient,
+		JFrogRegistry: jfrogRegistry,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceAccount")
 		os.Exit(1)
