@@ -1,3 +1,11 @@
 resources:
   - ../default
 
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+- name: jfrog-token-exchanger-config
+  envs:
+  - ./jfrog.env

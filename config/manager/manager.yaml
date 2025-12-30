@@ -72,6 +72,9 @@ spec:
         - --leader-elect
         image: ghcr.io/richardmcsong/jfrog-token-exchanger:latest
         name: manager
+        envFrom:
+        - configMapRef:
+            name: jfrog-token-exchanger-config
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
