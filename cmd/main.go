@@ -18,7 +18,9 @@ package main
 
 import (
 	"flag"
+	"net/http"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -64,6 +66,30 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	// Read required environment variables
+	jfrogURL := os.Getenv("JFROG_URL")
+	if jfrogURL == "" {
+		setupLog.Error(nil, "JFROG_URL environment variable is required")
+		os.Exit(1)
+	}
+
+	jfrogRegistry := os.Getenv("JFROG_REGISTRY")
+	if jfrogRegistry == "" {
+		setupLog.Error(nil, "JFROG_REGISTRY environment variable is required")
+		os.Exit(1)
+	}
+
+	providerName := os.Getenv("PROVIDER_NAME")
+	if providerName == "" {
+		setupLog.Error(nil, "PROVIDER_NAME environment variable is required")
+		os.Exit(1)
+	}
+
+	setupLog.Info("JFrog configuration loaded",
+		"jfrogURL", jfrogURL,
+		"jfrogRegistry", jfrogRegistry,
+		"providerName", providerName)
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
@@ -95,12 +121,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create JFrog client for token exchange
+	jfrogClient := &controller.DefaultJFrogClient{
+		HTTPClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		JFrogURL:     jfrogURL,
+		ProviderName: providerName,
+	}
+
 	if err = (&controller.ServiceAccountReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		TokenRequester: &controller.DefaultTokenRequester{
 			Clientset: clientset,
 		},
+		JFrogClient:   jfrogClient,
+		JFrogRegistry: jfrogRegistry,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceAccount")
 		os.Exit(1)
