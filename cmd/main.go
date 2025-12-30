@@ -18,7 +18,6 @@ package main
 
 import (
 	"crypto/tls"
-	"flag"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -54,27 +53,29 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
-
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
 	// Configure Viper to read environment variables
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix("JTE") // Use JTE prefix to prevent environment variable collisions
 
-	// Read required configuration
+	// Set default values for controller configuration
+	viper.SetDefault("METRICS_BIND_ADDRESS", ":8080")
+	viper.SetDefault("HEALTH_PROBE_BIND_ADDRESS", ":8081")
+	viper.SetDefault("LEADER_ELECT", false)
+	viper.SetDefault("ZAP_DEVELOPMENT", true)
+
+	// Read controller configuration from Viper
+	metricsAddr := viper.GetString("METRICS_BIND_ADDRESS")
+	probeAddr := viper.GetString("HEALTH_PROBE_BIND_ADDRESS")
+	enableLeaderElection := viper.GetBool("LEADER_ELECT")
+
+	// Configure zap logger using Viper
+	opts := zap.Options{
+		Development: viper.GetBool("ZAP_DEVELOPMENT"),
+	}
+
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// Read required JFrog configuration
 	jfrogURL := viper.GetString("JFROG_URL")
 	if jfrogURL == "" {
 		setupLog.Error(fmt.Errorf("missing required configuration"), "JFROG_URL environment variable is required")
