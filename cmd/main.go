@@ -72,7 +72,7 @@ func main() {
 
 	// Configure Viper to read environment variables
 	viper.AutomaticEnv()
-	viper.SetEnvPrefix("") // No prefix, read variables as-is
+	viper.SetEnvPrefix("JTE") // Use JTE prefix to prevent environment variable collisions
 
 	// Read required configuration
 	jfrogURL := viper.GetString("JFROG_URL")

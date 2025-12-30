@@ -38,9 +38,9 @@ The controller requires the following environment variables or configuration:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `JFROG_URL` | Base URL of your JFrog instance | `https://mycompany.jfrog.io` |
-| `JFROG_REGISTRY` | Registry hostname for docker config | `mycompany.jfrog.io` |
-| `PROVIDER_NAME` | OIDC provider name configured in JFrog | `my-k8s-cluster` |
+| `JTE_JFROG_URL` | Base URL of your JFrog instance | `https://mycompany.jfrog.io` |
+| `JTE_JFROG_REGISTRY` | Registry hostname for docker config | `mycompany.jfrog.io` |
+| `JTE_PROVIDER_NAME` | OIDC provider name configured in JFrog | `my-k8s-cluster` |
 
 ### Running on the cluster
 
