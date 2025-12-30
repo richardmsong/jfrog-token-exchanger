@@ -1,5 +1,7 @@
 # JFrog Token Exchanger
 
+[![CI](https://github.com/richardmcsong/jfrog-token-exchanger/actions/workflows/ci.yml/badge.svg)](https://github.com/richardmcsong/jfrog-token-exchanger/actions/workflows/ci.yml)
+
 A Kubernetes controller that automatically manages JFrog registry credentials by exchanging Kubernetes ServiceAccount tokens for JFrog access tokens using OIDC token exchange.
 
 ## Description

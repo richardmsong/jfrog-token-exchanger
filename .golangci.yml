@@ -1,0 +1,62 @@
+run:
+  timeout: 5m
+  go: '1.23'
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - revive
+    - unconvert
+    - unparam
+    - gosec
+    - exportloopref
+    - gocritic
+    - bodyclose
+    - nilerr
+    - nolintlint
+    - stylecheck
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable-all: true
+    settings:
+      shadow:
+        strict: true
+
+  gofmt:
+    simplify: true
+
+  revive:
+    confidence: 0.8
+
+  gosec:
+    excludes:
+      - G404  # Use of weak random number generator - ok for non-security purposes
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+
+    # Exclude generated files
+    - path: zz_generated.*\.go
+      linters:
+        - goimports
+        - gofmt
+        - revive
+        - stylecheck
