@@ -29,6 +29,7 @@ You'll need a Kubernetes cluster to run against. You can use [KIND](https://sigs
 
 - Kubernetes cluster (v1.27+)
 - JFrog instance with OIDC token exchange configured
+  - **Don't have a JFrog instance?** You can [provision a free trial of JFrog Artifactory](https://jfrog.com/start-free/) to test this controller
 - OIDC provider configured in JFrog that trusts your Kubernetes cluster's ServiceAccount tokens
 
 ### Configuration
