@@ -1,62 +1,60 @@
+version: "2"
 run:
-  timeout: 5m
-  go: '1.23'
-
+  go: "1.25"
 linters:
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    - gofmt
-    - goimports
-    - misspell
-    - revive
-    - unconvert
-    - unparam
-    - gosec
-    - exportloopref
-    - gocritic
     - bodyclose
+    - gocritic
+    - gosec
+    - misspell
     - nilerr
     - nolintlint
-    - stylecheck
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-
-  govet:
-    enable-all: true
-    settings:
-      shadow:
-        strict: true
-
-  gofmt:
-    simplify: true
-
-  revive:
-    confidence: 0.8
-
-  gosec:
-    excludes:
-      - G404  # Use of weak random number generator - ok for non-security purposes
-
-issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - gosec
-        - errcheck
-
-    # Exclude generated files
-    - path: zz_generated.*\.go
-      linters:
-        - goimports
-        - gofmt
-        - revive
-        - stylecheck
+    - revive
+    - staticcheck
+    - unconvert
+    - unparam
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    govet:
+      enable-all: true
+      settings:
+        shadow:
+          strict: true
+    revive:
+      confidence: 0.8
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+          - gosec
+        path: _test\.go
+      - linters:
+          - revive
+          - staticcheck
+        path: zz_generated.*\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - zz_generated.*\.go
