@@ -55,13 +55,11 @@ const (
 )
 
 // JFrogTokenResponse represents the response from JFrog OIDC token exchange
-//
-//nolint:govet // struct field order matches JSON response for readability
 type JFrogTokenResponse struct {
 	AccessToken string `json:"access_token"`
-	ExpiresIn   int64  `json:"expires_in"`
 	Scope       string `json:"scope"`
 	TokenType   string `json:"token_type"`
+	ExpiresIn   int64  `json:"expires_in"`
 }
 
 // DockerConfigJSON represents the Docker config.json format
