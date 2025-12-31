@@ -1,3 +1,8 @@
+# Auto-create PR for claude/* branches
+#
+# REQUIRED: Enable "Allow GitHub Actions to create and approve pull requests"
+# Settings → Actions → General → Workflow permissions
+#
 name: Auto Create PR
 
 on:
