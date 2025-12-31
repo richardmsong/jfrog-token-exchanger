@@ -1,0 +1,47 @@
+name: Auto Create PR
+
+on:
+  push:
+    branches:
+      - 'claude/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  create-pr:
+    name: Create Pull Request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get commit info
+        id: commit
+        run: |
+          echo "title=$(git log -1 --format='%s')" >> $GITHUB_OUTPUT
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          git log -1 --format='%b' >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if PR already exists for this branch
+          EXISTING_PR=$(gh pr list --head "${{ github.ref_name }}" --json number --jq '.[0].number')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "PR #$EXISTING_PR already exists for branch ${{ github.ref_name }}"
+            exit 0
+          fi
+
+          # Create the PR
+          gh pr create \
+            --title "${{ steps.commit.outputs.title }}" \
+            --body "${{ steps.commit.outputs.body }}" \
+            --head "${{ github.ref_name }}" \
+            --base "${{ github.event.repository.default_branch }}"
