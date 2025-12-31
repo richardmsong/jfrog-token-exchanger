@@ -1,6 +1,6 @@
 module github.com/richardmcsong/jfrog-token-exchanger
 
-go 1.24.6
+go 1.25
 
 require (
 	github.com/jfrog/jfrog-client-go v1.55.0
