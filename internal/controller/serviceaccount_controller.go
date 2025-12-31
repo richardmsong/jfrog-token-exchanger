@@ -40,11 +40,11 @@ import (
 
 const (
 	// AnnotationJFrogToken is the annotation key to enable JFrog token exchange
-	AnnotationJFrogToken = "jfrog.io/token"
+	AnnotationJFrogToken = "jfrog.io/token" // #nosec G101 -- This is an annotation key, not a credential
 	// AnnotationValueEnabled is the value to enable token exchange
 	AnnotationValueEnabled = "enabled"
 	// AnnotationSecretExpiry is the annotation key for token expiry time
-	AnnotationSecretExpiry = "jfrog.io/token-expiry"
+	AnnotationSecretExpiry = "jfrog.io/token-expiry" // #nosec G101 -- This is an annotation key, not a credential
 	// SecretNameSuffix is the suffix for the generated secret name
 	SecretNameSuffix = "-jfrog-token"
 	// DefaultTokenExpirationSeconds is the default token expiration for ServiceAccount tokens
@@ -56,9 +56,9 @@ const (
 // JFrogTokenResponse represents the response from JFrog OIDC token exchange
 type JFrogTokenResponse struct {
 	AccessToken string `json:"access_token"`
-	ExpiresIn   int64  `json:"expires_in"`
 	Scope       string `json:"scope"`
 	TokenType   string `json:"token_type"`
+	ExpiresIn   int64  `json:"expires_in"`
 }
 
 // DockerConfigJSON represents the Docker config.json format
@@ -124,7 +124,7 @@ func (c *DefaultJFrogClient) ExchangeToken(ctx context.Context, saToken string) 
 
 	var expiresIn int64
 	if response.ExpiresIn != nil {
-		expiresIn = int64(*response.ExpiresIn)
+		expiresIn = int64(*response.ExpiresIn) // #nosec G115 -- ExpiresIn is a token lifetime in seconds, won't overflow int64
 	}
 
 	return &JFrogTokenResponse{
@@ -216,7 +216,9 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		secret = &existingSecret
 		// Parse existing expiry time
 		if expiryStr, ok := existingSecret.Annotations[AnnotationSecretExpiry]; ok {
-			expiryTime, _ = time.Parse(time.RFC3339, expiryStr)
+			if parsedTime, err := time.Parse(time.RFC3339, expiryStr); err == nil {
+				expiryTime = parsedTime
+			}
 		}
 	}
 
@@ -238,10 +240,10 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	} else {
 		// Set owner reference so the secret is garbage collected when the SA is deleted
-		if err := controllerutil.SetControllerReference(&sa, secret, r.Scheme); err != nil {
+		if err = controllerutil.SetControllerReference(&sa, secret, r.Scheme); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to set owner reference: %w", err)
 		}
-		if err := r.Create(ctx, secret); err != nil {
+		if err = r.Create(ctx, secret); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to create secret: %w", err)
 		}
 	}

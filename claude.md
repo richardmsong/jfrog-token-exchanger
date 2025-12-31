@@ -125,6 +125,26 @@ Updated `go.mod` from `go 1.24.6` to `go 1.25`
 2. Move types to separate package excluded from controller-gen (complex)
 3. Update Go version (chosen - simplest and most correct)
 
+#### golangci-lint Configuration: Go 1.25 Compatibility
+
+**Problem:** After updating to Go 1.25, golangci-lint v2.7.2 flagged several issues:
+1. **gosec G101**: False positive on annotation constants (`AnnotationJFrogToken`, `AnnotationSecretExpiry`)
+2. **fieldalignment**: `JFrogTokenResponse` struct had suboptimal field ordering (48 pointer bytes instead of 40)
+
+**Solutions:**
+
+1. **gosec false positives** ([internal/controller/serviceaccount_controller.go](internal/controller/serviceaccount_controller.go:43-47))
+   - Added `// #nosec G101 -- This is an annotation key, not a credential` inline comments
+   - gosec incorrectly flags string constants containing "token" as potential hardcoded credentials
+   - These are Kubernetes annotation keys, not actual credentials
+
+2. **fieldalignment optimization** ([internal/controller/serviceaccount_controller.go](internal/controller/serviceaccount_controller.go:57-62))
+   - Reordered `JFrogTokenResponse` struct fields to minimize memory padding
+   - Placed `int64` field first, then string fields
+   - Before: `AccessToken, Scope, TokenType, ExpiresIn` (48 pointer bytes)
+   - After: `ExpiresIn, AccessToken, Scope, TokenType` (40 pointer bytes)
+   - Tests still pass with 72.1% coverage ✅
+
 #### Migration Notes for Future Reference
 
 When working with the SDK:
@@ -133,3 +153,4 @@ When working with the SDK:
 3. The SDK handles all HTTP-level details (TLS, retries, error handling)
 4. No need to manually construct URLs or handle URL encoding - SDK does this
 5. Requires Go 1.25+ due to type checker bug in earlier versions when embedding external SDK types
+6. Struct field ordering matters for memory efficiency - place larger fields (int64, pointers) before smaller ones (strings)

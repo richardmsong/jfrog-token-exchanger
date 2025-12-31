@@ -56,6 +56,10 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 fmt: ## Run go fmt against code.
 	go fmt ./...
 
+.PHONY: lint
+lint: ## Run go lint against code.
+	golangci-lint-v2 run
+
 .PHONY: fmt-check
 fmt-check: ## Check if code is formatted.
 	@if [ -n "$$(gofmt -s -l .)" ]; then \

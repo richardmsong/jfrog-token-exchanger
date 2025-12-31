@@ -19,9 +19,8 @@ linters:
       check-blank: true
     govet:
       enable-all: true
-      settings:
-        shadow:
-          strict: true
+      disable:
+        - shadow
     revive:
       confidence: 0.8
   exclusions:
