@@ -47,6 +47,13 @@ jobs:
             - Security concerns
             - Test coverage
 
+            CRITICAL - Verify Software Versions Before Claiming They Don't Exist:
+            Before claiming that a software version doesn't exist or hasn't been released, you MUST:
+            1. Search the web for the latest version of the software in question
+            2. Check official sources (GitHub releases, package registries, official documentation)
+            3. Cite your sources when making version-related claims
+            If you cannot verify a version exists, say "I was unable to verify this version" rather than asserting it doesn't exist.
+
             Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
 
             Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
