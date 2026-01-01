@@ -90,43 +90,55 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Generate Docker tags
+        id: tags
+        run: |
+          TAGS=""
+          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+
+          # Always add SHA tag for ephemeral builds
+          TAGS="sha-${SHA_SHORT}"
+
+          # Add branch name for pushes
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/heads/* ]]; then
+            BRANCH_NAME=${GITHUB_REF#refs/heads/}
+            TAGS="${TAGS} ${BRANCH_NAME}"
+          fi
+
+          # Add PR number for pull requests
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TAGS="${TAGS} pr-${{ github.event.pull_request.number }}"
+          fi
+
+          # Add semver tags for version tags
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            MAJOR=$(echo $VERSION | cut -d. -f1)
+            MINOR=$(echo $VERSION | cut -d. -f2)
+            TAGS="${TAGS} ${VERSION} ${MAJOR}.${MINOR} latest"
+            # Only add major tag if not v0.x.x
+            if [[ "$MAJOR" != "0" ]]; then
+              TAGS="${TAGS} ${MAJOR}"
+            fi
+          fi
+
+          # Add latest for default branch
+          if [[ "${{ github.ref }}" == "refs/heads/${{ github.event.repository.default_branch }}" ]]; then
+            TAGS="${TAGS} latest"
+          fi
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "Generated tags: ${TAGS}"
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            # Ephemeral tag for every commit on main/master
-            type=sha,prefix=sha-,format=short
-            # Branch name
-            type=ref,event=branch
-            # PR number
-            type=ref,event=pr,prefix=pr-
-            # Semver tags for releases
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
-            # Latest tag for default branch
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v') }}
+        run: make docker-login
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: make docker-buildx-ci
+        env:
+          DOCKER_TAGS: ${{ steps.tags.outputs.tags }}
+          DOCKER_PUSH: ${{ github.event_name != 'pull_request' && '1' || '' }}

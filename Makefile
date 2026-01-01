@@ -17,6 +17,14 @@ endif
 # tools. (i.e. podman)
 CONTAINER_TOOL ?= docker
 
+# Docker registry configuration
+REGISTRY ?= ghcr.io
+IMAGE_NAME ?= richardmcsong/jfrog-token-exchanger
+
+# DOCKER_TAGS can be set to override default tags (space-separated for multiple tags)
+# Example: make docker-buildx-ci DOCKER_TAGS="latest v1.0.0 sha-abc1234"
+DOCKER_TAGS ?= latest
+
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
@@ -108,23 +116,40 @@ docker-push: ## Push docker image with the manager.
 # To properly provided solutions that supports more than one platform you should use this option.
 PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 .PHONY: docker-buildx
-docker-buildx: test ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name project-v3-builder
-	$(CONTAINER_TOOL) buildx use project-v3-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm project-v3-builder
-	rm Dockerfile.cross
+docker-buildx: test docker-buildx-ci ## Build and push docker image for the manager for cross-platform support
+
+.PHONY: docker-setup
+docker-setup: ## Set up Docker Buildx builder for multi-arch builds.
+	- $(CONTAINER_TOOL) buildx create --name project-v3-builder --use 2>/dev/null || $(CONTAINER_TOOL) buildx use project-v3-builder
+
+.PHONY: docker-login
+docker-login: ## Log in to container registry. Requires REGISTRY_USER and REGISTRY_PASSWORD.
+	@if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_PASSWORD)" ]; then \
+		echo "Error: REGISTRY_USER and REGISTRY_PASSWORD must be set"; \
+		exit 1; \
+	fi
+	@echo "$(REGISTRY_PASSWORD)" | $(CONTAINER_TOOL) login $(REGISTRY) -u $(REGISTRY_USER) --password-stdin
 
 .PHONY: docker-buildx-ci
-docker-buildx-ci: ## Build and push multi-arch docker image (for CI, without test dependency).
+docker-buildx-ci: docker-setup ## Build and push multi-arch docker image (for CI, without test dependency).
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name project-v3-builder
-	$(CONTAINER_TOOL) buildx use project-v3-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm project-v3-builder
-	rm Dockerfile.cross
+	$(CONTAINER_TOOL) buildx build \
+		--platform=$(PLATFORMS) \
+		$(foreach tag,$(DOCKER_TAGS),--tag $(REGISTRY)/$(IMAGE_NAME):$(tag)) \
+		--push=$(if $(DOCKER_PUSH),true,false) \
+		--cache-from=type=registry,ref=$(REGISTRY)/$(IMAGE_NAME):buildcache \
+		--cache-to=type=registry,ref=$(REGISTRY)/$(IMAGE_NAME):buildcache,mode=max \
+		-f Dockerfile.cross .
+	rm -f Dockerfile.cross
+
+.PHONY: docker-buildx-local
+docker-buildx-local: docker-setup ## Build multi-arch docker image locally (no push).
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
+	$(CONTAINER_TOOL) buildx build \
+		--platform=$(PLATFORMS) \
+		$(foreach tag,$(DOCKER_TAGS),--tag $(REGISTRY)/$(IMAGE_NAME):$(tag)) \
+		-f Dockerfile.cross .
+	rm -f Dockerfile.cross
 
 ##@ Deployment
 
