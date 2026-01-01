@@ -134,7 +134,6 @@ jobs:
           echo "Generated tags: ${TAGS}"
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
         run: make docker-login
         env:
           REGISTRY_USER: ${{ github.actor }}
