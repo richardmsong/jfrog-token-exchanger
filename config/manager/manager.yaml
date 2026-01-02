@@ -70,7 +70,7 @@ spec:
         - /manager
         args:
         - --leader-elect
-        image: ghcr.io/richardmcsong/jfrog-token-exchanger:latest
+        image: controller:latest
         name: manager
         envFrom:
         - configMapRef:

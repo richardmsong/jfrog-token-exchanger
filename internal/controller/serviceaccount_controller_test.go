@@ -219,8 +219,11 @@ var _ = Describe("ServiceAccountReconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(dockerConfig.Auths).To(HaveKey("mycompany.jfrog.io"))
 
-			// JFrog format: empty username with token as password
-			expectedAuth := base64.StdEncoding.EncodeToString([]byte(":my-access-token"))
+			// JFrog format: base64(" :token")
+			// We use a space as the username because JFrog doesn't require a username
+			// when using access tokens, but the Docker config format requires a non-empty
+			// username (empty username like ":token" is invalid).
+			expectedAuth := base64.StdEncoding.EncodeToString([]byte(" :my-access-token"))
 			Expect(dockerConfig.Auths["mycompany.jfrog.io"].Auth).To(Equal(expectedAuth))
 		})
 
