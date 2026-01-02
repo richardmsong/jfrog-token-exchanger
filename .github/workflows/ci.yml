@@ -5,13 +5,20 @@ on:
     branches:
       - main
       - master
+    tags:
+      - 'v*.*.*'
   pull_request:
     branches:
       - main
       - master
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 permissions:
   contents: read
+  packages: write
 
 jobs:
   test:
@@ -71,3 +78,70 @@ jobs:
 
       - name: Build
         run: make build
+
+  docker:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Generate Docker tags
+        id: tags
+        run: |
+          TAGS=""
+          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+
+          # Always add SHA tag for ephemeral builds
+          TAGS="sha-${SHA_SHORT}"
+
+          # Add branch name for pushes
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/heads/* ]]; then
+            BRANCH_NAME=${GITHUB_REF#refs/heads/}
+            TAGS="${TAGS} ${BRANCH_NAME}"
+          fi
+
+          # Add PR number for pull requests
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TAGS="${TAGS} pr-${{ github.event.pull_request.number }}"
+          fi
+
+          # Add semver tags for version tags
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            MAJOR=$(echo $VERSION | cut -d. -f1)
+            MINOR=$(echo $VERSION | cut -d. -f2)
+            TAGS="${TAGS} ${VERSION} ${MAJOR}.${MINOR} latest"
+            # Only add major tag if not v0.x.x
+            if [[ "$MAJOR" != "0" ]]; then
+              TAGS="${TAGS} ${MAJOR}"
+            fi
+          fi
+
+          # Add latest for default branch
+          if [[ "${{ github.ref }}" == "refs/heads/${{ github.event.repository.default_branch }}" ]]; then
+            TAGS="${TAGS} latest"
+          fi
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "Generated tags: ${TAGS}"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: make docker-buildx-ci
+        env:
+          DOCKER_TAGS: ${{ steps.tags.outputs.tags }}
+          DOCKER_PUSH: ${{ github.event_name != 'pull_request' && '1' || '' }}

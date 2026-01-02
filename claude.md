@@ -1,5 +1,25 @@
 # Claude Development Notes
 
+## Code Review Guidelines
+
+### Verify Software Versions Before Claiming They Don't Exist
+
+**CRITICAL:** Before claiming that a software version doesn't exist or hasn't been released, you MUST:
+
+1. **Search the web** for the latest version of the software in question
+2. **Check official sources** (GitHub releases, package registries, official documentation)
+3. **Cite your sources** when making version-related claims
+
+**Why this matters:** Code reviews have incorrectly claimed versions like `golangci-lint v2.7.2` don't exist when they are in fact released and working. This causes unnecessary confusion and wasted effort.
+
+**Example of what NOT to do:**
+> "golangci-lint v2.7.2 doesn't exist - the latest is v1.62.0"
+
+**Example of correct approach:**
+> "I searched for golangci-lint releases at https://github.com/golangci/golangci-lint/releases and found that v2.7.2 was released on [date]. Source: [URL]"
+
+If you cannot verify a version exists, say "I was unable to verify this version" rather than asserting it doesn't exist.
+
 ## Project Conventions
 
 ### Use Make for All Lifecycle Commands
