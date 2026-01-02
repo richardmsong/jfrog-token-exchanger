@@ -327,7 +327,6 @@ func (r *ServiceAccountReconciler) createDockerConfigSecret(sa *corev1.ServiceAc
 	dockerConfig := DockerConfigJSON{
 		Auths: map[string]DockerConfigEntry{
 			r.JFrogRegistry: {
-
 				Auth: auth,
 			},
 		},
