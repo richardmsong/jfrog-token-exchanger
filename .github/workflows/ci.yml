@@ -11,6 +11,13 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch:
+    inputs:
+      push:
+        description: 'push the Docker image to the registry'
+        type: boolean
+        required: false
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -144,4 +151,5 @@ jobs:
         run: make docker-buildx-ci
         env:
           DOCKER_TAGS: ${{ steps.tags.outputs.tags }}
-          DOCKER_PUSH: ${{ github.event_name != 'pull_request' && '1' || '' }}
+          DOCKER_PUSH: '1'
+          # DOCKER_PUSH: ${{ github.event_name != 'pull_request' && '1' || '' }}
