@@ -1,3 +1,22 @@
+# Tag and Version Branch Workflow
+
+This document describes the tag workflow implementation for the jfrog-token-exchanger project.
+
+## Overview
+
+When a new version tag is created (e.g., `v1.2.3`), the following should happen:
+
+1. **Lock kustomization.yaml to the tag version**: The `config/manager/kustomization.yaml` file should be updated to reference the specific Docker image tag
+2. **Update major.minor branch**: Create or update a branch like `v1.2` to point to the latest patch version
+3. **Update major branch**: Create or update a branch like `v1` to point to the latest minor/patch version
+
+## Implementation Options
+
+### Option 1: Automated GitHub Actions Workflow (Recommended)
+
+Create `.github/workflows/tag-release.yml` with the following content:
+
+```yaml
 name: Tag Release
 
 on:
@@ -103,3 +122,53 @@ jobs:
           fi
 
           git push origin "$BRANCH" --force
+```
+
+**Note**: Due to Claude Code's GitHub App permissions, this workflow file could not be directly created in `.github/workflows/`. You'll need to manually create it or merge it from the PR.
+
+### Option 2: Manual Script Execution
+
+A script is provided at `scripts/update-version-branches.sh` that can be run manually:
+
+```bash
+# Make the script executable
+chmod +x scripts/update-version-branches.sh
+
+# Run for a specific tag
+./scripts/update-version-branches.sh v1.2.3
+```
+
+This is useful for:
+- One-off version releases
+- Testing the workflow before automating
+- Retroactively updating old tags
+
+## Example Workflow
+
+When you push tag `v1.2.3`:
+
+1. **Kustomization update**: `config/manager/kustomization.yaml` is updated:
+   ```yaml
+   images:
+   - name: controller
+     newName: ghcr.io/richardmcsong/jfrog-token-exchanger
+     newTag: v1.2.3
+   ```
+
+2. **Branch `v1.2` creation/update**: Points to the `v1.2.3` tag
+   - If you later push `v1.2.4`, this branch will be updated to point to `v1.2.4`
+
+3. **Branch `v1` creation/update**: Points to the `v1.2.3` tag
+   - If you later push `v1.3.0`, this branch will be updated to point to `v1.3.0`
+
+## Benefits
+
+- **Reproducible deployments**: Specific version tags lock to specific image versions
+- **Easy minor/patch tracking**: Users can track major or minor versions without pinning to patches
+- **Automated maintenance**: Version branches are automatically kept up-to-date
+
+## Notes
+
+- The `v0` major branch is intentionally skipped (common convention for pre-1.0 releases)
+- Force pushes are used for version branches (this is expected behavior for tracking branches)
+- The workflow requires `contents: write` permission to update branches and tags
