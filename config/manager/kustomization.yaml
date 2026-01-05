@@ -5,3 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: ghcr.io/richardmcsong/jfrog-token-exchanger
+  newTag: latest

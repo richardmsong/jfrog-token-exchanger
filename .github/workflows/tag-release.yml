@@ -1,0 +1,204 @@
+name: Release
+
+on:
+  # Trigger when release is created via GitHub UI
+  release:
+    types: [published]
+
+  # Manual trigger for dry-run testing
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to test (e.g., 1.0.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run - show what would happen without making changes'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    # Skip if triggered by github-actions bot to prevent loops
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${{ github.event.release.tag_name }}"
+          fi
+          VERSION="${VERSION#v}"
+
+          # Validate version format
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Invalid version format '$VERSION'. Expected format: X.Y.Z"
+            exit 1
+          fi
+
+          TAG="v${VERSION}"
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "major=${MAJOR}" >> $GITHUB_OUTPUT
+          echo "minor=${MINOR}" >> $GITHUB_OUTPUT
+          echo "patch=${PATCH}" >> $GITHUB_OUTPUT
+          echo "major_branch=v${MAJOR}" >> $GITHUB_OUTPUT
+          echo "minor_branch=v${MAJOR}.${MINOR}" >> $GITHUB_OUTPUT
+
+          echo "Version: ${VERSION}"
+          echo "Tag: ${TAG}"
+          echo "Major: ${MAJOR}, Minor: ${MINOR}, Patch: ${PATCH}"
+
+          if [[ "${{ env.DRY_RUN }}" == "true" ]]; then
+            echo "::notice::DRY RUN MODE - No changes will be pushed"
+          fi
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Kustomize
+        run: make kustomize
+
+      - name: Update kustomization.yaml with version tag
+        id: update_kustomization
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+
+          cd config/manager
+          ../../bin/kustomize edit set image controller=ghcr.io/richardmcsong/jfrog-token-exchanger:${TAG}
+
+          echo "Updated kustomization.yaml:"
+          cat kustomization.yaml
+
+          cd ../..
+
+          # Check if there are actual changes
+          if git diff --quiet config/manager/kustomization.yaml; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo ""
+            echo "Changes to be committed:"
+            git diff config/manager/kustomization.yaml
+          fi
+
+      - name: Commit version update
+        if: steps.update_kustomization.outputs.has_changes == 'true'
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          git add config/manager/kustomization.yaml
+          git commit -m "chore: update Docker image tag to ${TAG} [skip ci]"
+
+          if [[ "${{ env.DRY_RUN }}" == "true" ]]; then
+            echo "::notice::DRY RUN - Would push commit to main"
+          else
+            git push origin main
+            echo "Committed version update to main"
+          fi
+
+      - name: Update tag to include version commit
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+
+          # Delete local tag if it exists (from fetch)
+          git tag -d "$TAG" 2>/dev/null || true
+
+          # Create tag pointing to current HEAD (with updated kustomization.yaml)
+          git tag "$TAG"
+
+          if [[ "${{ env.DRY_RUN }}" == "true" ]]; then
+            echo "::notice::DRY RUN - Would force push tag $TAG to $(git rev-parse HEAD)"
+          else
+            git push origin "$TAG" --force
+            echo "Tag $TAG now points to commit with updated kustomization.yaml"
+          fi
+
+      - name: Create or update minor version branch
+        run: |
+          MINOR_BRANCH="${{ steps.version.outputs.minor_branch }}"
+          TAG="${{ steps.version.outputs.tag }}"
+
+          git branch -f "${MINOR_BRANCH}" HEAD
+
+          if [[ "${{ env.DRY_RUN }}" == "true" ]]; then
+            echo "::notice::DRY RUN - Would force push branch $MINOR_BRANCH"
+          else
+            git push origin "${MINOR_BRANCH}" --force
+            echo "Minor branch ${MINOR_BRANCH} now points to ${TAG}"
+          fi
+
+      - name: Create or update major version branch
+        run: |
+          MAJOR_BRANCH="${{ steps.version.outputs.major_branch }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          MAJOR="${{ steps.version.outputs.major }}"
+
+          # Skip major branch for v0.x.x versions
+          if [[ "$MAJOR" == "0" ]]; then
+            echo "Skipping major branch creation for v0.x.x version"
+            exit 0
+          fi
+
+          git branch -f "${MAJOR_BRANCH}" HEAD
+
+          if [[ "${{ env.DRY_RUN }}" == "true" ]]; then
+            echo "::notice::DRY RUN - Would force push branch $MAJOR_BRANCH"
+          else
+            git push origin "${MAJOR_BRANCH}" --force
+            echo "Major branch ${MAJOR_BRANCH} now points to ${TAG}"
+          fi
+
+      - name: Summary
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          MAJOR="${{ steps.version.outputs.major }}"
+          MINOR_BRANCH="${{ steps.version.outputs.minor_branch }}"
+          MAJOR_BRANCH="${{ steps.version.outputs.major_branch }}"
+
+          if [[ "${{ env.DRY_RUN }}" == "true" ]]; then
+            echo "## 🧪 Dry Run Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> No changes were pushed. This was a test run." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: ${TAG}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Docker Image**: \`ghcr.io/richardmcsong/jfrog-token-exchanger:${TAG}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Branches" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${MINOR_BRANCH}\` -> \`${TAG}\`" >> $GITHUB_STEP_SUMMARY
+          if [[ "$MAJOR" != "0" ]]; then
+            echo "- \`${MAJOR_BRANCH}\` -> \`${TAG}\`" >> $GITHUB_STEP_SUMMARY
+          fi
