@@ -1,0 +1,105 @@
+name: Tag Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  update-version-branches:
+    name: Update Version Branches and Kustomization
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Extract version information
+        id: version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MINOR" >> $GITHUB_OUTPUT
+          echo "patch=$PATCH" >> $GITHUB_OUTPUT
+          echo "major_minor=${MAJOR}.${MINOR}" >> $GITHUB_OUTPUT
+
+      - name: Update kustomization.yaml with tag
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+
+          # Update config/manager/kustomization.yaml
+          if grep -q "newTag:" config/manager/kustomization.yaml; then
+            sed -i "s/newTag:.*/newTag: $TAG/" config/manager/kustomization.yaml
+          else
+            # Add newTag after newName
+            sed -i "/newName: ghcr.io\/richardmcsong\/jfrog-token-exchanger/a\  newTag: $TAG" config/manager/kustomization.yaml
+          fi
+
+          # Commit the change
+          git add config/manager/kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "No changes to kustomization.yaml"
+          else
+            git commit -m "chore: update kustomization to use $TAG"
+            git tag -f "$TAG"
+            git push origin "$TAG" --force
+          fi
+
+      - name: Update or create major.minor branch
+        run: |
+          BRANCH="v${{ steps.version.outputs.major_minor }}"
+          TAG="${{ steps.version.outputs.tag }}"
+
+          # Check if branch exists remotely
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            echo "Branch $BRANCH exists, updating it"
+            git checkout -b "$BRANCH" "origin/$BRANCH"
+            git reset --hard "$TAG"
+          else
+            echo "Creating new branch $BRANCH"
+            git checkout -b "$BRANCH" "$TAG"
+          fi
+
+          git push origin "$BRANCH" --force
+
+      - name: Update or create major branch
+        run: |
+          MAJOR="${{ steps.version.outputs.major }}"
+          BRANCH="v$MAJOR"
+          TAG="${{ steps.version.outputs.tag }}"
+
+          # Skip v0 major branch
+          if [ "$MAJOR" = "0" ]; then
+            echo "Skipping major branch for v0.x.x"
+            exit 0
+          fi
+
+          # Check if branch exists remotely
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            echo "Branch $BRANCH exists, updating it"
+            git fetch origin "$BRANCH"
+            git checkout -b "$BRANCH" "origin/$BRANCH"
+            git reset --hard "$TAG"
+          else
+            echo "Creating new branch $BRANCH"
+            git checkout -b "$BRANCH" "$TAG"
+          fi
+
+          git push origin "$BRANCH" --force
