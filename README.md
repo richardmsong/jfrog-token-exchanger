@@ -38,11 +38,37 @@ You'll need a Kubernetes cluster to run against. You can use [KIND](https://sigs
 
 The controller requires the following environment variables or configuration:
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `JTE_JFROG_URL` | Base URL of your JFrog instance | `https://mycompany.jfrog.io` |
-| `JTE_JFROG_REGISTRY` | Registry hostname for docker config | `mycompany.jfrog.io` |
-| `JTE_PROVIDER_NAME` | OIDC provider name configured in JFrog | `my-k8s-cluster` |
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `JTE_JFROG_URL` | Yes | Base URL of your JFrog instance | `https://mycompany.jfrog.io` |
+| `JTE_JFROG_REGISTRY` | Yes | Registry hostname for docker config | `mycompany.jfrog.io` |
+| `JTE_PROVIDER_NAME` | Conditional* | OIDC provider name configured in JFrog | `my-k8s-cluster` |
+| `JTE_CLUSTER_NAME_RESOLUTION_MODE` | Conditional* | Auto-detect cluster name from environment. Supported modes: `azure` | `azure` |
+
+\* Either `JTE_PROVIDER_NAME` or `JTE_CLUSTER_NAME_RESOLUTION_MODE` must be set.
+
+#### Azure Kubernetes Service (AKS) Support
+
+When running in Azure Kubernetes Service (AKS), the controller can automatically detect your cluster name from the Kubernetes environment, eliminating the need to manually configure the provider name.
+
+**How it works:**
+- Set `JTE_CLUSTER_NAME_RESOLUTION_MODE=azure`
+- The controller reads the `KUBERNETES_SERVICE_HOST` environment variable
+- Extracts the cluster name from the AKS-specific hostname format
+- Uses the cluster name as the provider name for JFrog OIDC token exchange
+
+**Example AKS deployment:**
+```yaml
+env:
+  - name: JTE_JFROG_URL
+    value: "https://mycompany.jfrog.io"
+  - name: JTE_JFROG_REGISTRY
+    value: "mycompany.jfrog.io"
+  - name: JTE_CLUSTER_NAME_RESOLUTION_MODE
+    value: "azure"
+```
+
+**Note:** The cluster name extracted will match your AKS cluster's resource name. Ensure your JFrog OIDC provider is configured with this name.
 
 ### Running on the cluster
 

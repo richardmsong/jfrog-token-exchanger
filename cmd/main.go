@@ -39,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/richardmcsong/jfrog-token-exchanger/internal/clustername"
 	"github.com/richardmcsong/jfrog-token-exchanger/internal/controller"
 	//+kubebuilder:scaffold:imports
 )
@@ -94,10 +95,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	providerName := viper.GetString("PROVIDER_NAME")
-	if providerName == "" {
-		setupLog.Error(fmt.Errorf("missing required configuration"), "PROVIDER_NAME environment variable is required")
-		os.Exit(1)
+	// Resolve provider name: either from explicit config or cluster name resolution
+	var providerName string
+	clusterNameResolutionMode := viper.GetString("CLUSTER_NAME_RESOLUTION_MODE")
+
+	if clusterNameResolutionMode != "" {
+		// Cluster name resolution mode is set - auto-detect cluster name
+		setupLog.Info("Cluster name resolution mode enabled", "mode", clusterNameResolutionMode)
+
+		resolver := clustername.NewResolver()
+		detectedName, err := resolver.ResolveClusterName(clusterNameResolutionMode)
+		if err != nil {
+			setupLog.Error(err, "Failed to resolve cluster name",
+				"mode", clusterNameResolutionMode)
+			os.Exit(1)
+		}
+
+		providerName = detectedName
+		setupLog.Info("Cluster name auto-detected",
+			"clusterName", providerName,
+			"mode", clusterNameResolutionMode)
+	} else {
+		// Fall back to explicit PROVIDER_NAME (required in this case)
+		providerName = viper.GetString("PROVIDER_NAME")
+		if providerName == "" {
+			setupLog.Error(fmt.Errorf("missing required configuration"),
+				"Either PROVIDER_NAME or CLUSTER_NAME_RESOLUTION_MODE environment variable is required")
+			os.Exit(1)
+		}
+		setupLog.Info("Using explicitly configured provider name", "providerName", providerName)
 	}
 
 	setupLog.Info("JFrog configuration loaded",
