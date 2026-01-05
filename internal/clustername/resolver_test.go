@@ -31,7 +31,11 @@ func TestClusterName(t *testing.T) {
 var _ = Describe("Resolver", func() {
 	Context("ResolveClusterName", func() {
 		It("should return error for unsupported mode", func() {
-			resolver := NewResolver()
+			resolver := &Resolver{
+				getEnv: func(key string) string {
+					return ""
+				},
+			}
 			_, err := resolver.ResolveClusterName("unsupported")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported cluster name resolution mode"))
@@ -52,7 +56,11 @@ var _ = Describe("Resolver", func() {
 		})
 
 		It("should return error for empty mode", func() {
-			resolver := NewResolver()
+			resolver := &Resolver{
+				getEnv: func(key string) string {
+					return ""
+				},
+			}
 			_, err := resolver.ResolveClusterName("")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported cluster name resolution mode"))

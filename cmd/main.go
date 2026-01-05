@@ -95,12 +95,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Resolve provider name: either from explicit config or cluster name resolution
+	// Resolve provider name: prefer explicit config, fall back to cluster name resolution
 	var providerName string
+	providerName = viper.GetString("PROVIDER_NAME")
 	clusterNameResolutionMode := viper.GetString("CLUSTER_NAME_RESOLUTION_MODE")
 
-	if clusterNameResolutionMode != "" {
-		// Cluster name resolution mode is set - auto-detect cluster name
+	if providerName != "" {
+		// Explicit PROVIDER_NAME is set - use it (takes precedence)
+		setupLog.Info("Using explicitly configured provider name", "providerName", providerName)
+		if clusterNameResolutionMode != "" {
+			setupLog.Info("CLUSTER_NAME_RESOLUTION_MODE is set but PROVIDER_NAME takes precedence",
+				"ignoredMode", clusterNameResolutionMode)
+		}
+	} else if clusterNameResolutionMode != "" {
+		// No explicit PROVIDER_NAME - auto-detect cluster name
 		setupLog.Info("Cluster name resolution mode enabled", "mode", clusterNameResolutionMode)
 
 		resolver := clustername.NewResolver()
@@ -116,14 +124,10 @@ func main() {
 			"clusterName", providerName,
 			"mode", clusterNameResolutionMode)
 	} else {
-		// Fall back to explicit PROVIDER_NAME (required in this case)
-		providerName = viper.GetString("PROVIDER_NAME")
-		if providerName == "" {
-			setupLog.Error(fmt.Errorf("missing required configuration"),
-				"Either PROVIDER_NAME or CLUSTER_NAME_RESOLUTION_MODE environment variable is required")
-			os.Exit(1)
-		}
-		setupLog.Info("Using explicitly configured provider name", "providerName", providerName)
+		// Neither PROVIDER_NAME nor CLUSTER_NAME_RESOLUTION_MODE is set
+		setupLog.Error(fmt.Errorf("missing required configuration"),
+			"Either PROVIDER_NAME or CLUSTER_NAME_RESOLUTION_MODE configuration is required")
+		os.Exit(1)
 	}
 
 	setupLog.Info("JFrog configuration loaded",
