@@ -100,14 +100,15 @@ func main() {
 	providerName = viper.GetString("PROVIDER_NAME")
 	clusterNameResolutionMode := viper.GetString("CLUSTER_NAME_RESOLUTION_MODE")
 
-	if providerName != "" {
+	switch {
+	case providerName != "":
 		// Explicit PROVIDER_NAME is set - use it (takes precedence)
 		setupLog.Info("Using explicitly configured provider name", "providerName", providerName)
 		if clusterNameResolutionMode != "" {
 			setupLog.Info("CLUSTER_NAME_RESOLUTION_MODE is set but PROVIDER_NAME takes precedence",
 				"ignoredMode", clusterNameResolutionMode)
 		}
-	} else if clusterNameResolutionMode != "" {
+	case clusterNameResolutionMode != "":
 		// No explicit PROVIDER_NAME - auto-detect cluster name
 		setupLog.Info("Cluster name resolution mode enabled", "mode", clusterNameResolutionMode)
 
@@ -123,7 +124,7 @@ func main() {
 		setupLog.Info("Cluster name auto-detected",
 			"clusterName", providerName,
 			"mode", clusterNameResolutionMode)
-	} else {
+	default:
 		// Neither PROVIDER_NAME nor CLUSTER_NAME_RESOLUTION_MODE is set
 		setupLog.Error(fmt.Errorf("missing required configuration"),
 			"Either PROVIDER_NAME or CLUSTER_NAME_RESOLUTION_MODE configuration is required")
