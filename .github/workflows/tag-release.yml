@@ -57,21 +57,21 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+
       - name: Update kustomization.yaml with version tag
         id: update_kustomization
         run: |
-          KUSTOMIZATION_FILE="config/manager/kustomization.yaml"
           TAG="${{ steps.version.outputs.tag }}"
 
-          # Update newTag value
-          if grep -q "newTag:" "$KUSTOMIZATION_FILE"; then
-            sed -i "s/newTag:.*/newTag: ${TAG}/" "$KUSTOMIZATION_FILE"
-          else
-            sed -i "/newName: ghcr.io\/richardmcsong\/jfrog-token-exchanger/a\\  newTag: ${TAG}" "$KUSTOMIZATION_FILE"
-          fi
+          cd config/manager
+          kustomize edit set image controller=ghcr.io/richardmcsong/jfrog-token-exchanger:${TAG}
 
           echo "Updated kustomization.yaml:"
-          cat "$KUSTOMIZATION_FILE"
+          cat kustomization.yaml
+
+          cd ../..
 
           # Check if there are actual changes
           if git diff --quiet config/manager/kustomization.yaml; then
