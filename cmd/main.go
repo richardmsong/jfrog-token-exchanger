@@ -39,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/richardmcsong/jfrog-token-exchanger/internal/clustername"
 	"github.com/richardmcsong/jfrog-token-exchanger/internal/controller"
 	//+kubebuilder:scaffold:imports
 )
@@ -94,9 +95,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	providerName := viper.GetString("PROVIDER_NAME")
-	if providerName == "" {
-		setupLog.Error(fmt.Errorf("missing required configuration"), "PROVIDER_NAME environment variable is required")
+	// Resolve provider name: prefer explicit config, fall back to cluster name resolution
+	var providerName string
+	providerName = viper.GetString("PROVIDER_NAME")
+	clusterNameResolutionMode := viper.GetString("CLUSTER_NAME_RESOLUTION_MODE")
+
+	switch {
+	case providerName != "":
+		// Explicit PROVIDER_NAME is set - use it (takes precedence)
+		setupLog.Info("Using explicitly configured provider name", "providerName", providerName)
+		if clusterNameResolutionMode != "" {
+			setupLog.Info("CLUSTER_NAME_RESOLUTION_MODE is set but PROVIDER_NAME takes precedence",
+				"ignoredMode", clusterNameResolutionMode)
+		}
+	case clusterNameResolutionMode != "":
+		// No explicit PROVIDER_NAME - auto-detect cluster name
+		setupLog.Info("Cluster name resolution mode enabled", "mode", clusterNameResolutionMode)
+
+		resolver := clustername.NewResolver()
+		detectedName, err := resolver.ResolveClusterName(clusterNameResolutionMode)
+		if err != nil {
+			setupLog.Error(err, "Failed to resolve cluster name",
+				"mode", clusterNameResolutionMode)
+			os.Exit(1)
+		}
+
+		providerName = detectedName
+		setupLog.Info("Cluster name auto-detected",
+			"clusterName", providerName,
+			"mode", clusterNameResolutionMode)
+	default:
+		// Neither PROVIDER_NAME nor CLUSTER_NAME_RESOLUTION_MODE is set
+		setupLog.Error(fmt.Errorf("missing required configuration"),
+			"Either PROVIDER_NAME or CLUSTER_NAME_RESOLUTION_MODE configuration is required")
 		os.Exit(1)
 	}
 
