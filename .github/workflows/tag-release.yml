@@ -92,15 +92,18 @@ jobs:
       - name: Update kustomization.yaml with version tag
         id: update_kustomization
         run: |
-          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          DOCKER_IMAGE="ghcr.io/richardmcsong/jfrog-token-exchanger:${VERSION}"
 
           cd config/manager
-          ../../bin/kustomize edit set image controller=ghcr.io/richardmcsong/jfrog-token-exchanger:${TAG}
+          ../../bin/kustomize edit set image controller=${DOCKER_IMAGE}
 
           echo "Updated kustomization.yaml:"
           cat kustomization.yaml
 
           cd ../..
+
+          echo "docker_image=${DOCKER_IMAGE}" >> $GITHUB_OUTPUT
 
           # Check if there are actual changes
           if git diff --quiet config/manager/kustomization.yaml; then
@@ -180,12 +183,6 @@ jobs:
 
       - name: Summary
         run: |
-          TAG="${{ steps.version.outputs.tag }}"
-          VERSION="${{ steps.version.outputs.version }}"
-          MAJOR="${{ steps.version.outputs.major }}"
-          MINOR_BRANCH="${{ steps.version.outputs.minor_branch }}"
-          MAJOR_BRANCH="${{ steps.version.outputs.major_branch }}"
-
           if [[ "${{ env.DRY_RUN }}" == "true" ]]; then
             echo "## 🧪 Dry Run Summary" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -194,11 +191,11 @@ jobs:
             echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tag**: ${TAG}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Docker Image**: \`ghcr.io/richardmcsong/jfrog-token-exchanger:${TAG}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Docker Image**: \`${{ steps.update_kustomization.outputs.docker_image }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Branches" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${MINOR_BRANCH}\` -> \`${TAG}\`" >> $GITHUB_STEP_SUMMARY
-          if [[ "$MAJOR" != "0" ]]; then
-            echo "- \`${MAJOR_BRANCH}\` -> \`${TAG}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ steps.version.outputs.minor_branch }}\` -> \`${{ steps.version.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.version.outputs.major }}" != "0" ]]; then
+            echo "- \`${{ steps.version.outputs.major_branch }}\` -> \`${{ steps.version.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           fi
