@@ -92,10 +92,10 @@ jobs:
       - name: Update kustomization.yaml with version tag
         id: update_kustomization
         run: |
-          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
 
           cd config/manager
-          ../../bin/kustomize edit set image controller=ghcr.io/richardmcsong/jfrog-token-exchanger:${TAG}
+          ../../bin/kustomize edit set image controller=ghcr.io/richardmcsong/jfrog-token-exchanger:${VERSION}
 
           echo "Updated kustomization.yaml:"
           cat kustomization.yaml
