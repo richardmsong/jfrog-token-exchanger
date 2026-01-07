@@ -39,6 +39,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Get commit info
         id: commit
@@ -52,7 +53,7 @@ jobs:
         env:
           # Use Claude GitHub App token if available, fall back to GITHUB_TOKEN
           # Claude App token allows PR to trigger other workflows (CI, code review)
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           # Check if PR already exists for this branch
           EXISTING_PR=$(gh pr list --head "${{ github.ref_name }}" --json number --jq '.[0].number')
