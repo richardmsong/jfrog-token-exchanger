@@ -30,8 +30,8 @@ jobs:
       # To use PAT: set WORKFLOW_PAT secret
       - name: Generate GitHub App Token
         id: app-token
-        if: ${{ secrets.APP_ID != '' && secrets.APP_PRIVATE_KEY != '' }}
         uses: actions/create-github-app-token@v1
+        continue-on-error: true
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
