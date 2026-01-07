@@ -19,16 +19,30 @@ jobs:
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
-      issues: read
-      id-token: write
-      actions: read # Required for Claude to read CI results on PRs
+      contents: write      # Required for pushing commits
+      pull-requests: write # Required for updating PRs
+      issues: write        # Required for commenting on issues
+      id-token: write      # Required for OAuth token exchange
+      actions: read        # Required for Claude to read CI results on PRs
     steps:
+      # Generate token from GitHub App (preferred) or fall back to PAT/GITHUB_TOKEN
+      # To use GitHub App: set APP_ID and APP_PRIVATE_KEY secrets
+      # To use PAT: set WORKFLOW_PAT secret
+      - name: Generate GitHub App Token
+        id: app-token
+        if: ${{ secrets.APP_ID != '' && secrets.APP_PRIVATE_KEY != '' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          # Priority: GitHub App token > PAT > GITHUB_TOKEN
+          # GitHub App token can modify .github/workflows/ if app has 'workflows' permission
+          token: ${{ steps.app-token.outputs.token || secrets.WORKFLOW_PAT || github.token }}
 
       - name: Run Claude Code
         id: claude
@@ -40,11 +54,9 @@ jobs:
           additional_permissions: |
             actions: read
 
-          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
-          # prompt: 'Update the pull request description to include a summary of changes.'
-
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr:*)'
+          # Enable Claude to run build/test commands and git operations
+          # This allows commands like 'go mod tidy', 'make test', 'git commit', etc.
+          # See: https://docs.anthropic.com/en/docs/claude-code/cli-reference
+          claude_args: |
+            --allowedTools "Bash(go:*),Bash(make:*),Bash(git:*),Bash(npm:*),Bash(cargo:*),mcp__codesign__sign_file"
 
