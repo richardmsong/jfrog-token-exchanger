@@ -45,6 +45,18 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
+            IMPORTANT - Summarize Previous Reviews:
+            Before writing your new review, use `gh pr view ${{ github.event.pull_request.number }} --json comments` to fetch existing comments.
+            If there are previous Claude Code Review comments (comments from github-actions bot or containing "Claude Code Review"):
+            1. Summarize each previous Claude review into a concise bullet point (1-2 lines max per review)
+            2. Include these summaries in a "Previous Reviews Summary" section at the TOP of your new comment
+            3. Use this format:
+               ## Previous Reviews Summary
+               - **[Date]**: [Brief summary of key points from that review]
+               - **[Date]**: [Brief summary of key points from that review]
+
+            This helps reduce repetitive content while preserving review history context.
+
             Please review this pull request and provide feedback on:
             - Code quality and best practices
             - Potential bugs or issues
