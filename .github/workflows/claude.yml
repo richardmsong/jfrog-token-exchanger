@@ -25,13 +25,24 @@ jobs:
       id-token: write      # Required for OAuth token exchange
       actions: read        # Required for Claude to read CI results on PRs
     steps:
+      # Generate token from GitHub App (preferred) or fall back to PAT/GITHUB_TOKEN
+      # To use GitHub App: set APP_ID and APP_PRIVATE_KEY secrets
+      # To use PAT: set WORKFLOW_PAT secret
+      - name: Generate GitHub App Token
+        id: app-token
+        if: ${{ secrets.APP_ID != '' && secrets.APP_PRIVATE_KEY != '' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          # Use PAT for checkout to enable pushing to .github/workflows/
-          # If WORKFLOW_PAT is not set, falls back to GITHUB_TOKEN (won't be able to modify workflows)
-          token: ${{ secrets.WORKFLOW_PAT || github.token }}
+          # Priority: GitHub App token > PAT > GITHUB_TOKEN
+          # GitHub App token can modify .github/workflows/ if app has 'workflows' permission
+          token: ${{ steps.app-token.outputs.token || secrets.WORKFLOW_PAT || github.token }}
 
       - name: Run Claude Code
         id: claude
