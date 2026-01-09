@@ -1,5 +1,3 @@
-name: CI
-
 on:
   push:
     branches:
@@ -30,5 +28,4 @@ jobs:
       go-version-file: 'go.mod'
       push-image: ${{ github.event_name != 'pull_request' }}
       docker-build-target: 'docker-buildx-ci'
-      push-image: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
