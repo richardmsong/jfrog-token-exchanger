@@ -29,6 +29,5 @@ jobs:
     uses: richardmsong/shared-workflows/.github/workflows/ci.yml@main
     with:
       go-version-file: 'go.mod'
-      push-image: true
       docker-build-target: 'docker-buildx-ci'
     secrets: inherit
