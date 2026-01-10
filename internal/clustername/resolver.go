@@ -17,9 +17,14 @@ limitations under the License.
 package clustername
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 const (
@@ -27,18 +32,27 @@ const (
 	ResolutionModeAzure = "azure"
 	// KubernetesServiceHostEnv is the environment variable for Kubernetes service host
 	KubernetesServiceHostEnv = "KUBERNETES_SERVICE_HOST"
+	// azureIMDSEndpoint is the Azure Instance Metadata Service endpoint
+	azureIMDSEndpoint = "http://169.254.169.254/metadata/instance/compute/resourceId?api-version=2021-02-01&format=text"
+	// azureIMDSTimeout is the timeout for IMDS requests
+	azureIMDSTimeout = 2 * time.Second
 )
 
 // Resolver provides methods for resolving cluster names from the environment
 type Resolver struct {
 	// getEnv is a function to retrieve environment variables (allows testing)
 	getEnv func(string) string
+	// httpClient is the HTTP client for making requests (allows testing)
+	httpClient *http.Client
 }
 
 // NewResolver creates a new cluster name resolver
 func NewResolver() *Resolver {
 	return &Resolver{
 		getEnv: os.Getenv,
+		httpClient: &http.Client{
+			Timeout: azureIMDSTimeout,
+		},
 	}
 }
 
@@ -55,11 +69,18 @@ func (r *Resolver) ResolveClusterName(mode string) (string, error) {
 
 // resolveAzureClusterName extracts the cluster name from the KUBERNETES_SERVICE_HOST environment variable
 // Expected format: cluster-name-dns-somehash.<guid>.privatelink.<region>.azmk8s.io
+// If KUBERNETES_SERVICE_HOST is an IP address, falls back to Azure IMDS
 // Returns: cluster-name
 func (r *Resolver) resolveAzureClusterName() (string, error) {
 	serviceHost := r.getEnv(KubernetesServiceHostEnv)
 	if serviceHost == "" {
 		return "", fmt.Errorf("%s environment variable not found", KubernetesServiceHostEnv)
+	}
+
+	// Check if serviceHost is an IP address
+	if isIPAddress(serviceHost) {
+		// Fall back to Azure IMDS
+		return r.resolveFromAzureIMDS()
 	}
 
 	// Split by '-dns' to extract cluster name (use last occurrence)
@@ -74,4 +95,62 @@ func (r *Resolver) resolveAzureClusterName() (string, error) {
 	}
 
 	return clusterName, nil
+}
+
+// isIPAddress checks if a string is an IP address
+func isIPAddress(s string) bool {
+	return net.ParseIP(s) != nil
+}
+
+// resolveFromAzureIMDS queries the Azure Instance Metadata Service to get the cluster name
+func (r *Resolver) resolveFromAzureIMDS() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), azureIMDSTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", azureIMDSEndpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create IMDS request: %w", err)
+	}
+
+	// Azure IMDS requires the Metadata header
+	req.Header.Set("Metadata", "true")
+
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to query Azure IMDS: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Azure IMDS returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read IMDS response: %w", err)
+	}
+
+	// resourceId format: /subscriptions/{subscription}/resourceGroups/{rg}/providers/Microsoft.ContainerService/managedClusters/{cluster-name}
+	resourceID := string(body)
+	clusterName := extractClusterNameFromResourceID(resourceID)
+	if clusterName == "" {
+		return "", fmt.Errorf("failed to extract cluster name from resource ID: %s", resourceID)
+	}
+
+	return clusterName, nil
+}
+
+// extractClusterNameFromResourceID extracts the cluster name from an Azure resource ID
+func extractClusterNameFromResourceID(resourceID string) string {
+	// Expected format: /subscriptions/{subscription}/resourceGroups/{rg}/providers/Microsoft.ContainerService/managedClusters/{cluster-name}
+	parts := strings.Split(resourceID, "/")
+
+	// Find the index of "managedClusters"
+	for i, part := range parts {
+		if part == "managedClusters" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+
+	return ""
 }
