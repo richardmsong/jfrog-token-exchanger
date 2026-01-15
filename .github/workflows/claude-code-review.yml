@@ -2,91 +2,10 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    types: [opened, reopened, synchronize, labeled]
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Generate GitHub App Token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        continue-on-error: true
-        with:
-          app-id: ${{ secrets.CLAUDE_APP_ID }}
-          private-key: ${{ secrets.CLAUDE_APP_PRIVATE_KEY }}
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Run Claude Code Review
-        id: claude-review
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ steps.app-token.outputs.token }}
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
-
-            IMPORTANT - Edit Previous Reviews to be Shorter:
-            Before writing your new review, use `gh pr view ${{ github.event.pull_request.number }} --json comments` to fetch existing comments.
-            If there are previous Claude Code Review comments that are verbose (comments from github-actions bot or containing "Claude Code Review"):
-            1. Identify the comment ID and body for each verbose Claude review comment
-            2. For each verbose comment, create a condensed version that keeps only:
-               - Critical issues and bugs
-               - Actionable suggestions
-               - Final verdict/summary
-               - Remove: excessive explanations, minor observations, redundant context
-            3. Target: condensed comments should be <500 words (aim for 50% or less of original length)
-            4. To safely edit comments, create a temporary file with the condensed content:
-               ```bash
-               echo "$CONDENSED_CONTENT" > /tmp/condensed_comment.txt
-               gh api --method PATCH "/repos/${{ github.repository }}/issues/comments/{comment_id}" --input /tmp/condensed_comment.txt -f body=@-
-               ```
-               This avoids shell injection issues with quotes in the content.
-            5. Error Handling: If editing fails (permissions, locked comments, API limits):
-               - Skip that comment and continue with others
-               - Note in your review that some previous comments couldn't be condensed
-               - Do NOT let edit failures block your new review
-
-            This helps reduce comment volume in PR threads while preserving key information.
-
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
-
-            CRITICAL - Verify Software Versions Before Claiming They Don't Exist:
-            Before claiming that a software version doesn't exist or hasn't been released, you MUST:
-            1. Search the web for the latest version of the software in question
-            2. Check official sources (GitHub releases, package registries, official documentation)
-            3. Cite your sources when making version-related claims
-            If you cannot verify a version exists, say "I was unable to verify this version" rather than asserting it doesn't exist.
-
-            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
-
-            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
-
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
-
+    if: contains(github.event.pull_request.labels.*.name, 'review-with-claude')
+    uses: richardmsong/shared-workflows/.github/workflows/claude-code-review.yml@main
+    secrets: inherit

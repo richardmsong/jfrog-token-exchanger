@@ -1,14 +1,3 @@
-# Auto-create PR for claude/* branches
-#
-# REQUIRED: Enable "Allow GitHub Actions to create and approve pull requests"
-# Settings → Actions → General → Workflow permissions
-#
-# NOTE: Uses Claude GitHub App token to create PRs so that pull_request events
-# trigger other workflows (CI, code review). PRs created with GITHUB_TOKEN
-# by github-actions[bot] don't trigger other workflows.
-#
-# REQUIRED SECRETS: CLAUDE_APP_ID and CLAUDE_APP_PRIVATE_KEY
-#
 name: Auto Create PR
 
 on:
@@ -22,50 +11,5 @@ permissions:
 
 jobs:
   create-pr:
-    name: Create Pull Request
-    runs-on: ubuntu-latest
-    steps:
-      # Generate token from Claude GitHub App to ensure PR triggers other workflows
-      # PRs created with GITHUB_TOKEN don't trigger pull_request events
-      - name: Generate Claude GitHub App Token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        continue-on-error: true
-        with:
-          app-id: ${{ secrets.CLAUDE_APP_ID }}
-          private-key: ${{ secrets.CLAUDE_APP_PRIVATE_KEY }}
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Get commit info
-        id: commit
-        run: |
-          echo "title=$(git log -1 --format='%s')" >> $GITHUB_OUTPUT
-          echo "body<<EOF" >> $GITHUB_OUTPUT
-          git log -1 --format='%b' >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Create Pull Request
-        env:
-          # Use Claude GitHub App token if available, fall back to GITHUB_TOKEN
-          # Claude App token allows PR to trigger other workflows (CI, code review)
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          # Check if PR already exists for this branch
-          EXISTING_PR=$(gh pr list --head "${{ github.ref_name }}" --json number --jq '.[0].number')
-
-          if [ -n "$EXISTING_PR" ]; then
-            echo "PR #$EXISTING_PR already exists for branch ${{ github.ref_name }}"
-            exit 0
-          fi
-
-          # Create the PR
-          gh pr create \
-            --title "${{ steps.commit.outputs.title }}" \
-            --body "${{ steps.commit.outputs.body }}" \
-            --head "${{ github.ref_name }}" \
-            --base "${{ github.event.repository.default_branch }}"
+    uses: richardmsong/shared-workflows/.github/workflows/auto-pr.yml@main
+    secrets: inherit
