@@ -17,6 +17,8 @@ limitations under the License.
 package clustername
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -25,20 +27,23 @@ import (
 const (
 	// ResolutionModeAzure is the cluster name resolution mode for Azure Kubernetes Service
 	ResolutionModeAzure = "azure"
-	// KubernetesServiceHostEnv is the environment variable for Kubernetes service host
-	KubernetesServiceHostEnv = "KUBERNETES_SERVICE_HOST"
+	// ServiceAccountTokenPath is the default path to the Kubernetes service account token
+	ServiceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token" //nolint:gosec // G101: This is a file path, not a credential
 )
 
 // Resolver provides methods for resolving cluster names from the environment
 type Resolver struct {
 	// getEnv is a function to retrieve environment variables (allows testing)
 	getEnv func(string) string
+	// readFile is a function to read files (allows testing)
+	readFile func(string) ([]byte, error)
 }
 
 // NewResolver creates a new cluster name resolver
 func NewResolver() *Resolver {
 	return &Resolver{
-		getEnv: os.Getenv,
+		getEnv:   os.Getenv,
+		readFile: os.ReadFile,
 	}
 }
 
@@ -53,24 +58,107 @@ func (r *Resolver) ResolveClusterName(mode string) (string, error) {
 	}
 }
 
-// resolveAzureClusterName extracts the cluster name from the KUBERNETES_SERVICE_HOST environment variable
-// Expected format: cluster-name-dns-somehash.<guid>.privatelink.<region>.azmk8s.io
+// resolveAzureClusterName extracts the cluster name from the Kubernetes service account token
+// It reads the token from /var/run/secrets/kubernetes.io/serviceaccount/token,
+// decodes the JWT, and extracts the cluster name from the audience claim.
+// Expected audience format: https://<cluster-name>-dns-<hash>.hcp.<region>.azmk8s.io
 // Returns: cluster-name
 func (r *Resolver) resolveAzureClusterName() (string, error) {
-	serviceHost := r.getEnv(KubernetesServiceHostEnv)
-	if serviceHost == "" {
-		return "", fmt.Errorf("%s environment variable not found", KubernetesServiceHostEnv)
+	// Read the service account token
+	tokenBytes, err := r.readFile(ServiceAccountTokenPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read service account token from %s: %w", ServiceAccountTokenPath, err)
 	}
 
-	// Split by '-dns' to extract cluster name (use last occurrence)
-	dnsIndex := strings.LastIndex(serviceHost, "-dns")
+	token := string(tokenBytes)
+	if token == "" {
+		return "", fmt.Errorf("service account token is empty")
+	}
+
+	// Decode JWT without verification (we only need to read the payload)
+	clusterName, err := extractClusterNameFromToken(token)
+	if err != nil {
+		return "", fmt.Errorf("failed to extract cluster name from token: %w", err)
+	}
+
+	return clusterName, nil
+}
+
+// extractClusterNameFromToken decodes a JWT token and extracts the cluster name from the audience claim
+func extractClusterNameFromToken(token string) (string, error) {
+	// JWT format: header.payload.signature
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("invalid JWT format: expected 3 parts, got %d", len(parts))
+	}
+
+	// Decode the payload (second part)
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("failed to decode JWT payload: %w", err)
+	}
+
+	// Parse the JSON payload
+	var claims struct {
+		Aud interface{} `json:"aud"` // Can be string or []string
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "", fmt.Errorf("failed to parse JWT claims: %w", err)
+	}
+
+	// Extract audiences (handle both string and array formats)
+	var audiences []string
+	switch aud := claims.Aud.(type) {
+	case string:
+		audiences = []string{aud}
+	case []interface{}:
+		for _, a := range aud {
+			if s, ok := a.(string); ok {
+				audiences = append(audiences, s)
+			}
+		}
+	default:
+		return "", fmt.Errorf("unexpected aud claim type: %T", claims.Aud)
+	}
+
+	// Find the AKS audience and extract cluster name
+	for _, aud := range audiences {
+		clusterName, err := extractClusterNameFromAudience(aud)
+		if err == nil {
+			return clusterName, nil
+		}
+	}
+
+	return "", fmt.Errorf("no valid AKS audience found in token (expected format: https://<cluster-name>-dns-<hash>.hcp.<region>.azmk8s.io)")
+}
+
+// extractClusterNameFromAudience extracts the cluster name from an AKS audience URL
+// Expected format: https://<cluster-name>-dns-<hash>.hcp.<region>.azmk8s.io
+// Returns error if format doesn't match
+func extractClusterNameFromAudience(audience string) (string, error) {
+	// Check if this looks like an AKS audience URL
+	if !strings.HasPrefix(audience, "https://") {
+		return "", fmt.Errorf("audience does not start with https://: %s", audience)
+	}
+	if !strings.Contains(audience, ".hcp.") {
+		return "", fmt.Errorf("audience does not contain .hcp.: %s", audience)
+	}
+	if !strings.Contains(audience, ".azmk8s.io") {
+		return "", fmt.Errorf("audience does not contain .azmk8s.io: %s", audience)
+	}
+
+	// Remove the https:// prefix
+	host := strings.TrimPrefix(audience, "https://")
+
+	// Extract cluster name (everything before -dns)
+	dnsIndex := strings.Index(host, "-dns-")
 	if dnsIndex == -1 {
-		return "", fmt.Errorf("invalid AKS service host format: expected '<cluster-name>-dns-...' but got '%s'", serviceHost)
+		return "", fmt.Errorf("audience does not contain -dns- segment: %s", audience)
 	}
 
-	clusterName := serviceHost[:dnsIndex]
+	clusterName := host[:dnsIndex]
 	if clusterName == "" {
-		return "", fmt.Errorf("extracted cluster name is empty from service host: %s", serviceHost)
+		return "", fmt.Errorf("cluster name is empty in audience: %s", audience)
 	}
 
 	return clusterName, nil

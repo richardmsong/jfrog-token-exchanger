@@ -49,13 +49,14 @@ The controller requires the following environment variables or configuration:
 
 #### Azure Kubernetes Service (AKS) Support
 
-When running in Azure Kubernetes Service (AKS), the controller can automatically detect your cluster name from the Kubernetes environment, eliminating the need to manually configure the provider name.
+When running in Azure Kubernetes Service (AKS), the controller can automatically detect your cluster name from the Kubernetes service account token, eliminating the need to manually configure the provider name.
 
 **How it works:**
 - Set `JTE_CLUSTER_NAME_RESOLUTION_MODE=azure`
-- The controller reads the `KUBERNETES_SERVICE_HOST` environment variable
-- Extracts the cluster name from the AKS-specific hostname format
-- Uses the cluster name as the provider name for JFrog OIDC token exchange
+- The controller reads the service account token from `/var/run/secrets/kubernetes.io/serviceaccount/token`
+- Decodes the JWT token and extracts the cluster name from the audience claim
+- The audience claim format: `https://<cluster-name>-dns-<hash>.hcp.<region>.azmk8s.io`
+- Uses the extracted cluster name as the provider name for JFrog OIDC token exchange
 
 **Example AKS deployment:**
 ```yaml
@@ -68,7 +69,7 @@ env:
     value: "azure"
 ```
 
-**Note:** The cluster name extracted will match your AKS cluster's resource name. Ensure your JFrog OIDC provider is configured with this name.
+**Important:** The cluster name extracted will match your AKS cluster's resource name. **You must configure your JFrog Artifactory OIDC provider name to match your AKS cluster name exactly.** For example, if your AKS cluster is named `my-prod-cluster`, your JFrog OIDC provider must also be named `my-prod-cluster`.
 
 ### Running on the cluster
 
