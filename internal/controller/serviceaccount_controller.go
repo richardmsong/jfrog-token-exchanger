@@ -201,6 +201,9 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 		// Remove from imagePullSecrets if present (regardless of whether secret was found)
 		if err := r.removeImagePullSecret(ctx, &sa, secretName); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{}, fmt.Errorf("failed to remove imagePullSecret: %w", err)
 		}
 
@@ -286,6 +289,9 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Attach imagePullSecret to ServiceAccount if not already attached
 	if err := r.ensureImagePullSecret(ctx, &sa, secretName); err != nil {
+		if apierrors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("failed to ensure image pull secret: %w", err)
 	}
 
